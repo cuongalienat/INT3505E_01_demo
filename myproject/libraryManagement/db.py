@@ -24,5 +24,4 @@ def init_db(app):
         with open(schema_path, "r", encoding="utf8") as f:
             sql = f.read()
             db.executescript(sql)
-
         db.commit()
