@@ -1,0 +1,348 @@
+openapi: 3.0.0
+info:
+  title: Simple Library API (Thư viện cơ bản)
+  description: |
+    RESTful API cơ bản để quản lý người dùng, sách và các giao dịch mượn/trả sách.
+    
+    **Lưu ý:**
+    - API sử dụng SQLite, trường `available` của Book là `1` (có sẵn) hoặc `0` (đã mượn).
+    - Endpoint `/init-db` được dùng để khởi tạo cấu trúc database.
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:5000
+    description: Server phát triển (Flask mặc định)
+
+components:
+  schemas:
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+          description: ID duy nhất của người dùng.
+        name:
+          type: string
+          description: Tên người dùng.
+      required:
+        - name
+      example:
+        id: 1
+        name: Nguyễn Văn A
+
+    Book:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+          description: ID duy nhất của sách.
+        title:
+          type: string
+          description: Tiêu đề sách.
+        author:
+          type: string
+          description: Tác giả.
+        available:
+          type: integer
+          format: int32
+          description: Trạng thái có sẵn.
+      required:
+        - title
+        - author
+        - available
+      example:
+        id: 101
+        title: Đắc Nhân Tâm
+        author: Dale Carnegie
+        available: 1
+
+    BookInput:
+      type: object
+      properties:
+        title:
+          type: string
+          description: Tiêu đề sách.
+        author:
+          type: string
+          description: Tác giả.
+      required:
+        - title
+        - author
+
+    BorrowInput:
+      type: object
+      properties:
+        user_id:
+          type: integer
+          format: int32
+          description: ID người dùng mượn sách.
+        book_id:
+          type: integer
+          format: int32
+          description: ID sách được mượn.
+      required:
+        - user_id
+        - book_id
+      example:
+        user_id: 1
+        book_id: 101
+
+    MessageResponse:
+      type: object
+      properties:
+        message:
+          type: string
+          description: Thông báo mô tả kết quả hoạt động.
+
+    Link:
+      type: object
+      properties:
+        rel:
+          type: string
+          description: Mối quan hệ của link.
+        href:
+          type: string
+          format: uri
+          description: URL của tài nguyên liên quan.
+
+    BookHATEOASResponse:
+      type: object
+      description: Phản hồi khi thêm sách, bao gồm các liên kết HATEOAS.
+      properties:
+        message:
+          type: string
+        data:
+          type: object
+          properties:
+            id:
+              type: integer
+            title:
+              type: string
+            author:
+              type: string
+        links:
+          type: array
+          items:
+            $ref: '#/components/schemas/Link'
+
+paths:
+  /:
+    get:
+      summary: Kiểm tra tình trạng API
+      responses:
+        '200':
+          description: Trả về 'Hello, World!'
+          content:
+            text/plain:
+              schema:
+                type: string
+              example: Hello, World!
+
+  /init-db:
+    get:
+      summary: Khởi tạo database (chạy câu lệnh DROP và CREATE tables)
+      responses:
+        '200':
+          description: Database đã được khởi tạo thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+              example:
+                message: Database initialized!
+
+  /users:
+    post:
+      summary: Tạo người dùng mới
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+              required:
+                - name
+              example:
+                name: Lê Văn B
+      responses:
+        '200':
+          description: Người dùng được tạo thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+              example:
+                message: User created successfully
+
+  /books:
+    get:
+      summary: Lấy danh sách tất cả sách
+      responses:
+        '200':
+          description: Danh sách sách (bao gồm trạng thái available)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Book'
+    post:
+      summary: Thêm sách mới (trả về HATEOAS links)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BookInput'
+      responses:
+        '201':
+          description: Sách được thêm thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookHATEOASResponse'
+              example:
+                message: Book added successfully
+                data:
+                  id: 101
+                  title: Đắc Nhân Tâm
+                  author: Dale Carnegie
+                links:
+                  - rel: self
+                    href: http://localhost:5000/books/101
+
+  /books/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int32
+        description: ID của sách
+    get:
+      summary: Lấy thông tin sách bằng ID
+      responses:
+        '200':
+          description: Thông tin chi tiết của sách
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Book'
+        '404':
+          description: Không tìm thấy sách
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+              example:
+                message: Book not found
+    put:
+      summary: Cập nhật tiêu đề và tác giả sách
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BookInput'
+      responses:
+        '200':
+          description: Sách được cập nhật thành công
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  data:
+                    type: object
+                    properties:
+                      id:
+                        type: integer
+                      new_title:
+                        type: string
+                      new_author:
+                        type: string
+              example:
+                message: Book updated successfully
+                data:
+                  id: 101
+                  new_title: Đắc Nhân Tâm (Tái bản)
+                  new_author: Dale Carnegie
+    delete:
+      summary: Xóa sách bằng ID
+      responses:
+        '200':
+          description: Sách được xóa thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+              example:
+                message: Book deleted successfully
+
+  /borrows:
+    post:
+      summary: Thực hiện giao dịch mượn sách
+      description: Ghi lại giao dịch mượn sách và cập nhật trạng thái `available` của sách thành `0`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BorrowInput'
+      responses:
+        '200':
+          description: Sách được mượn thành công
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  createdAt:
+                    type: string
+                    format: date-time
+              example:
+                message: Book borrowed successfully
+                createdAt: 2025-10-14T10:00:00Z
+        '400':
+          description: Sách không có sẵn để mượn
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+              example:
+                message: Book not available
+    patch:
+      summary: Thực hiện giao dịch trả sách
+      description: Cập nhật `return_date` và `borrow_status` của giao dịch mượn, đồng thời cập nhật trạng thái `available` của sách thành `1`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BorrowInput'
+      responses:
+        '200':
+          description: Sách được trả thành công
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  createdAt:
+                    type: string
+                    format: date-time
+              example:
+                message: Book returned successfully
+                createdAt: 2025-10-14T12:00:00Z
