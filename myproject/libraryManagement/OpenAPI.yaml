@@ -3,7 +3,7 @@ info:
   title: Simple Library API (Thư viện cơ bản)
   description: |
     RESTful API cơ bản để quản lý người dùng, sách và các giao dịch mượn/trả sách.
-    
+
     **Lưu ý:**
     - API sử dụng SQLite, trường `available` của Book là `1` (có sẵn) hoặc `0` (đã mượn).
     - Endpoint `/init-db` được dùng để khởi tạo cấu trúc database.
@@ -15,6 +15,48 @@ servers:
 
 components:
   schemas:
+    # --- Định nghĩa Schema Phản hồi cho Phân trang ---
+    Metadata:
+      type: object
+      properties:
+        totalItems:
+          type: integer
+          description: Tổng số mục (sau khi lọc/tìm kiếm).
+        totalPages:
+          type: integer
+          description: Tổng số trang.
+        currentPage:
+          type: integer
+          description: Trang hiện tại.
+        pageSize:
+          type: integer
+          description: Số mục trên mỗi trang.
+
+    UserListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/User'
+          description: Danh sách người dùng trong trang hiện tại.
+        meta:
+          $ref: '#/components/schemas/Metadata'
+          description: Thông tin phân trang.
+
+    BookListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Book'
+          description: Danh sách sách trong trang hiện tại.
+        meta:
+          $ref: '#/components/schemas/Metadata'
+          description: Thông tin phân trang.
+          
+    # --- Các schemas bạn đã định nghĩa trước đó ---
     User:
       type: object
       properties:
@@ -128,6 +170,151 @@ components:
             $ref: '#/components/schemas/Link'
 
 paths:
+  # --- Định nghĩa lại /users (Bổ sung GET) ---
+  /users:
+    get:
+      tags:
+        - User
+      summary: Lấy danh sách tất cả người dùng, hỗ trợ tìm kiếm và phân trang.
+      parameters:
+        - in: query
+          name: q
+          schema:
+            type: string
+          description: Từ khóa tìm kiếm chung (theo tên).
+        - in: query
+          name: page
+          schema:
+            type: integer
+            default: 1
+          description: Số trang muốn lấy (bắt đầu từ 1).
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 10
+            maximum: 100
+          description: Số lượng người dùng tối đa trên mỗi trang.
+      responses:
+        '200':
+          description: Danh sách người dùng đã được phân trang.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserListResponse'
+              example:
+                data:
+                  - id: 1
+                    name: Nguyễn Văn A
+                  - id: 2
+                    name: Lê Thị C
+                meta:
+                  totalItems: 50
+                  totalPages: 5
+                  currentPage: 1
+                  pageSize: 10
+    post:
+      summary: Tạo người dùng mới
+      # ... (giữ nguyên requestBody và responses) ...
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+              required:
+                - name
+              example:
+                name: Lê Văn B
+      responses:
+        '200':
+          description: Người dùng được tạo thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+              example:
+                message: User created successfully
+
+  # --- Định nghĩa lại /books ---
+  /books:
+    get:
+      tags:
+        - Book
+      summary: Lấy danh sách sách, hỗ trợ tìm kiếm, lọc và phân trang.
+      parameters:
+        - in: query
+          name: q
+          schema:
+            type: string
+          description: Từ khóa tìm kiếm chung (theo tiêu đề hoặc tác giả).
+        - in: query
+          name: available
+          schema:
+            type: integer
+            enum: [0, 1]
+          description: Lọc theo trạng thái có sẵn.
+        - in: query
+          name: page
+          schema:
+            type: integer
+            default: 1
+          description: Số trang muốn lấy (bắt đầu từ 1).
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+          description: Số lượng sách tối đa trên mỗi trang.
+      responses:
+        '200':
+          description: Danh sách sách đã được phân trang và lọc.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookListResponse'
+              example:
+                data:
+                  - id: 101
+                    title: Đắc Nhân Tâm
+                    author: Dale Carnegie
+                    available: 1
+                meta:
+                  totalItems: 80
+                  totalPages: 4
+                  currentPage: 1
+                  pageSize: 20
+    post:
+      summary: Thêm sách mới (trả về HATEOAS links)
+      # ... (giữ nguyên requestBody và responses) ...
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BookInput'
+      responses:
+        '201':
+          description: Sách được thêm thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookHATEOASResponse'
+              example:
+                message: Book added successfully
+                data:
+                  id: 101
+                  title: Đắc Nhân Tâm
+                  author: Dale Carnegie
+                links:
+                  - rel: self
+                    href: http://localhost:5000/books/101
+
+  # --- Giữ nguyên các định nghĩa khác ---
   /:
     get:
       summary: Kiểm tra tình trạng API
@@ -152,69 +339,6 @@ paths:
                 $ref: '#/components/schemas/MessageResponse'
               example:
                 message: Database initialized!
-
-  /users:
-    post:
-      summary: Tạo người dùng mới
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                name:
-                  type: string
-              required:
-                - name
-              example:
-                name: Lê Văn B
-      responses:
-        '200':
-          description: Người dùng được tạo thành công
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MessageResponse'
-              example:
-                message: User created successfully
-
-  /books:
-    get:
-      summary: Lấy danh sách tất cả sách
-      responses:
-        '200':
-          description: Danh sách sách (bao gồm trạng thái available)
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Book'
-    post:
-      summary: Thêm sách mới (trả về HATEOAS links)
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/BookInput'
-      responses:
-        '201':
-          description: Sách được thêm thành công
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/BookHATEOASResponse'
-              example:
-                message: Book added successfully
-                data:
-                  id: 101
-                  title: Đắc Nhân Tâm
-                  author: Dale Carnegie
-                links:
-                  - rel: self
-                    href: http://localhost:5000/books/101
 
   /books/{id}:
     parameters:
