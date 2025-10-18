@@ -13,7 +13,7 @@ def get_time():
 
     # Nếu client có header và chưa quá 10 giây, trả 304 (Not Modified)
     if client_time and (time.time() - last_update < 10):
-        return make_response("", 304)
+        return make_response("", 304)   
 
     # Ngược lại, trả dữ liệu mới và thêm header cache
     resp = make_response(jsonify({

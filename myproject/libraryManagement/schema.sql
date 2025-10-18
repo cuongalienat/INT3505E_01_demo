@@ -14,7 +14,7 @@ CREATE TABLE books (
     available INTEGER NOT NULL DEFAULT 1
 );
 
-CREATE TABLE borrows (
+CREATE TABLE loans (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,
     book_id INTEGER NOT NULL,
