@@ -61,7 +61,7 @@ def add_book():
     ]
 
     response = {
-        "message": "Book added successfully!",
+        "message": "Book added successfully (v1)!",
         "data": {
             "id": new_id,
             "title": data["title"],
