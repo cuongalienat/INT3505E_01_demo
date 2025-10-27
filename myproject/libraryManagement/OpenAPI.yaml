@@ -5,6 +5,7 @@ info:
     REST API cho hệ thống quản lý thư viện — phiên bản v1  
     Bao gồm quản lý người dùng, sách, mượn/trả sách, xác thực JWT, và khởi tạo database.
   version: 1.0.0
+
 servers:
   - url: http://127.0.0.1:5000/api/v1
     description: Local development server
@@ -90,18 +91,52 @@ paths:
   /users:
     get:
       tags: [Users]
-      summary: Lấy danh sách người dùng
+      summary: Lấy danh sách người dùng (có tìm kiếm & phân trang)
       security:
         - bearerAuth: []
+      parameters:
+        - name: search
+          in: query
+          description: Từ khóa tìm kiếm theo tên hoặc username
+          required: false
+          schema:
+            type: string
+            example: cuong
+        - name: page
+          in: query
+          description: Số trang (bắt đầu từ 1)
+          required: false
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          description: Số bản ghi mỗi trang
+          required: false
+          schema:
+            type: integer
+            default: 10
       responses:
         200:
-          description: Danh sách người dùng
+          description: Danh sách người dùng có phân trang
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/User'
+                type: object
+                properties:
+                  total:
+                    type: integer
+                    example: 42
+                  page:
+                    type: integer
+                    example: 1
+                  limit:
+                    type: integer
+                    example: 10
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/User'
 
     post:
       tags: [Users]
@@ -123,16 +158,50 @@ paths:
   /books:
     get:
       tags: [Books]
-      summary: Lấy danh sách tất cả sách
+      summary: Lấy danh sách tất cả sách (có tìm kiếm & phân trang)
+      parameters:
+        - name: search
+          in: query
+          description: Từ khóa tìm kiếm theo tiêu đề hoặc tác giả
+          required: false
+          schema:
+            type: string
+            example: harry
+        - name: page
+          in: query
+          description: Số trang (bắt đầu từ 1)
+          required: false
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          description: Số bản ghi mỗi trang
+          required: false
+          schema:
+            type: integer
+            default: 10
       responses:
         200:
-          description: Danh sách sách
+          description: Danh sách sách có phân trang
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Book'
+                type: object
+                properties:
+                  total:
+                    type: integer
+                    example: 120
+                  page:
+                    type: integer
+                    example: 1
+                  limit:
+                    type: integer
+                    example: 10
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Book'
 
     post:
       tags: [Books]
@@ -212,18 +281,52 @@ paths:
   /loans:
     get:
       tags: [Loans]
-      summary: Lấy danh sách lượt mượn
+      summary: Lấy danh sách lượt mượn (có tìm kiếm & phân trang)
       security:
         - bearerAuth: []
+      parameters:
+        - name: search
+          in: query
+          description: Tìm kiếm theo tên người dùng hoặc tiêu đề sách
+          required: false
+          schema:
+            type: string
+            example: cuong
+        - name: page
+          in: query
+          description: Số trang (bắt đầu từ 1)
+          required: false
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          description: Số bản ghi mỗi trang
+          required: false
+          schema:
+            type: integer
+            default: 10
       responses:
         200:
-          description: Danh sách lượt mượn
+          description: Danh sách lượt mượn có phân trang
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Loan'
+                type: object
+                properties:
+                  total:
+                    type: integer
+                    example: 15
+                  page:
+                    type: integer
+                    example: 1
+                  limit:
+                    type: integer
+                    example: 10
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Loan'
 
     post:
       tags: [Loans]
@@ -302,7 +405,7 @@ components:
           example: 123456
         name:
           type: string
-          example: Nguyễn Lê Việt Cường
+          example: cuong
 
     Book:
       type: object

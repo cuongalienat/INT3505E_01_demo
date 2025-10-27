@@ -5,54 +5,118 @@ from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identi
 
 v1 = Blueprint("v1", __name__, url_prefix="/api/v1")
 
-
-# Khởi tạo database
+# -------------------- SYSTEM --------------------
 @v1.route("/init-db", methods=["GET"])
 def init_database():
     init_db(current_app)
     return jsonify({"message": "Database initialized!"})
 
-#  USERS
+# -------------------- AUTH --------------------
+@v1.route("/auths", methods=["POST"])
+def login():
+    data = request.json
+    db = get_db()
+    user = db.execute("SELECT * FROM users WHERE username = ?", (data["username"],)).fetchone()
+    if not user or user["password"] != data["password"]:
+        return jsonify({"msg": "user not exist"}), 400
+
+    access_token = create_access_token(identity=str(user["id"]))
+    return jsonify({"msg": "sign in successfully", "access_token": access_token}), 200
+
+# -------------------- USERS --------------------
 @v1.route("/users", methods=["POST"])
 def create_user():
     data = request.json
     db = get_db()
     user = db.execute("SELECT * FROM users WHERE username = ?", (data["username"],)).fetchone()
     if user:
-        return jsonify({"msg" : "users already exist"}), 400
-    db.execute("INSERT INTO users (username, password, name) VALUES (?, ?, ?)", ( data["username"], data["password"],data["name"],))
+        return jsonify({"msg": "user already exist"}), 400
+
+    db.execute(
+        "INSERT INTO users (username, password, name) VALUES (?, ?, ?)",
+        (data["username"], data["password"], data["name"]),
+    )
     db.commit()
-    return jsonify({"message": "User created!"})
-# ... (trong Blueprint v1) ...
+    return jsonify({"message": "User created!"}), 201
 
-@v1.route("/auths", methods=["POST"])
-def login():
-    data = request.json
-    db = get_db()
-    # Lấy người dùng theo username
-    user = db.execute("SELECT * FROM users WHERE username = ?", (data["username"],)).fetchone()
 
-    # Kiểm tra người dùng và mật khẩu
-    if not user:
-        return jsonify({"msg": "user not exist"}), 400
-    if user["password"] != data["password"]:
-        return jsonify({"msg": "user not exist"}), 400
-    
-    # Tạo token truy cập. Identity của token là user_id
-    access_token = create_access_token(identity=str(user["id"]))
-    return jsonify({"msg" : "sign in successfully", "access_token": access_token}), 200
-
-# BOOKS
-
-# getAllBook
-@v1.route("/books", methods=["GET"])
+@v1.route("/users", methods=["GET"])
 @jwt_required()
-def get_books():
+def get_all_users():
+    """
+    GET /users: Lấy danh sách người dùng có tìm kiếm và phân trang.
+    Query: ?search=cuong&page=1&limit=10
+    """
     db = get_db()
-    books = db.execute("SELECT * FROM books").fetchall()
-    return jsonify([dict(b) for b in books])
 
-# getBookbyID
+    # --- Lấy tham số query ---
+    search = request.args.get("search", "").strip()
+    page = int(request.args.get("page", 1))
+    limit = int(request.args.get("limit", 10))
+    offset = (page - 1) * limit
+
+    # --- Tạo truy vấn ---
+    base_query = "SELECT id, username, name FROM users"
+    count_query = "SELECT COUNT(*) AS total FROM users"
+    params = ()
+
+    if search:
+        base_query += " WHERE username LIKE ? OR name LIKE ?"
+        count_query += " WHERE username LIKE ? OR name LIKE ?"
+        params = (f"%{search}%", f"%{search}%")
+
+    base_query += " LIMIT ? OFFSET ?"
+    users = db.execute(base_query, (*params, limit, offset)).fetchall()
+    total = db.execute(count_query, params).fetchone()["total"]
+
+    users_list = [
+        {"userId": u["id"], "username": u["username"], "full_name": u["name"]}
+        for u in users
+    ]
+
+    return jsonify({
+        "total": total,
+        "page": page,
+        "limit": limit,
+        "data": users_list
+    }), 200
+
+
+# -------------------- BOOKS --------------------
+@v1.route("/books", methods=["GET"])
+def get_books():
+    """
+    GET /books: Lấy danh sách sách có tìm kiếm và phân trang.
+    Query: ?search=harry&page=1&limit=10
+    """
+    db = get_db()
+
+    search = request.args.get("search", "").strip()
+    page = int(request.args.get("page", 1))
+    limit = int(request.args.get("limit", 10))
+    offset = (page - 1) * limit
+
+    base_query = "SELECT * FROM books"
+    count_query = "SELECT COUNT(*) AS total FROM books"
+    params = ()
+
+    if search:
+        base_query += " WHERE title LIKE ? OR author LIKE ?"
+        count_query += " WHERE title LIKE ? OR author LIKE ?"
+        params = (f"%{search}%", f"%{search}%")
+
+    base_query += " LIMIT ? OFFSET ?"
+    books = db.execute(base_query, (*params, limit, offset)).fetchall()
+    total = db.execute(count_query, params).fetchone()["total"]
+
+    return jsonify({
+        "total": total,
+        "page": page,
+        "limit": limit,
+        "data": [dict(b) for b in books]
+    }), 200
+
+
 @v1.route("/books/<int:id>", methods=["GET"])
 @jwt_required()
 def get_book(id):
@@ -62,9 +126,8 @@ def get_book(id):
         return jsonify({"error": "Book not found"}), 404
     return jsonify(dict(book))
 
-# addBook
+
 @v1.route("/books", methods=["POST"])
-@jwt_required()
 def add_book():
     data = request.json
     db = get_db()
@@ -102,21 +165,26 @@ def add_book():
 def update_book(id):
     data = request.json
     db = get_db()
-    db.execute("UPDATE books SET title=?, author=? WHERE id=?",
-               (data["title"], data["author"], id))
+    db.execute(
+        "UPDATE books SET title=?, author=? WHERE id=?",
+        (data["title"], data["author"], id),
+    )
     db.commit()
-    return jsonify({"message": "Book updated!","data": { "id" : id, "new_title": data["title"], "new_author": data["author"]}})
+    return jsonify({
+        "message": "Book updated!",
+        "data": {"id": id, "new_title": data["title"], "new_author": data["author"]},
+    }), 200
 
-# deleteBook
+
 @v1.route("/books/<int:id>", methods=["DELETE"])
 @jwt_required()
 def delete_book(id):
     db = get_db()
     db.execute("DELETE FROM books WHERE id=?", (id,))
     db.commit()
-    return jsonify({"message": "Book deleted!"})
+    return jsonify({"message": "Book deleted!"}), 200
 
-# borrowBook
+# -------------------- LOANS --------------------
 @v1.route("/loans", methods=["POST"])
 @jwt_required()
 def borrow_book():
@@ -132,9 +200,50 @@ def borrow_book():
                (user_id, data["book_id"], time, "Borrowed"))
     db.execute("UPDATE books SET available=0 WHERE id=?", (data["book_id"],))
     db.commit()
-    return jsonify({"message": "Book borrowed!", "createdAt" : time})
+    return jsonify({"message": "Book borrowed!", "createdAt": time}), 201
 
-# returnBook
+
+@v1.route("/loans", methods=["GET"])
+@jwt_required()
+def get_loans():
+    """
+    GET /loans: Lấy danh sách lượt mượn có tìm kiếm và phân trang.
+    Query: ?search=harry&page=1&limit=10
+    """
+    db = get_db()
+
+    search = request.args.get("search", "").strip()
+    page = int(request.args.get("page", 1))
+    limit = int(request.args.get("limit", 10))
+    offset = (page - 1) * limit
+
+    base_query = """
+        SELECT loans.id, users.name AS user_name, books.title AS book_title,
+               loans.borrow_date, loans.return_date, loans.borrow_status
+        FROM loans
+        JOIN users ON loans.user_id = users.id
+        JOIN books ON loans.book_id = books.id
+    """
+    count_query = "SELECT COUNT(*) AS total FROM loans JOIN users ON loans.user_id = users.id JOIN books ON loans.book_id = books.id"
+    params = ()
+
+    if search:
+        base_query += " WHERE users.name LIKE ? OR books.title LIKE ?"
+        count_query += " WHERE users.name LIKE ? OR books.title LIKE ?"
+        params = (f"%{search}%", f"%{search}%")
+
+    base_query += " ORDER BY loans.borrow_date DESC LIMIT ? OFFSET ?"
+    loans = db.execute(base_query, (*params, limit, offset)).fetchall()
+    total = db.execute(count_query, params).fetchone()["total"]
+
+    return jsonify({
+        "total": total,
+        "page": page,
+        "limit": limit,
+        "data": [dict(l) for l in loans],
+    }), 200
+
+
 @v1.route("/loans", methods=["PATCH"])
 @jwt_required()
 def return_book():
