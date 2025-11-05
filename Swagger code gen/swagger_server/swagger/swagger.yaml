@@ -1,0 +1,577 @@
+openapi: 3.0.0
+info:
+  title: Library Management API (v1)
+  description: |
+    REST API cho hệ thống quản lý thư viện — phiên bản v1   Bao gồm quản lý người dùng, sách, mượn/trả sách, xác thực JWT, và khởi tạo database.
+  version: 1.0.0
+servers:
+- url: http://127.0.0.1:5000/api/v1
+  description: Local development server
+tags:
+- name: Auths
+  description: Các API xác thực (JWT)
+- name: Users
+  description: Quản lý người dùng
+- name: Books
+  description: Quản lý sách
+- name: Loans
+  description: Quản lý lượt mượn/trả
+- name: System
+  description: Khởi tạo hệ thống
+paths:
+  /:
+    get:
+      tags:
+      - System
+      summary: Kiểm tra trạng thái server
+      operationId: root_get
+      responses:
+        "200":
+          description: "Trả về \"Hello, World!\""
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/inline_response_200"
+      x-openapi-router-controller: swagger_server.controllers.system_controller
+  /init-db:
+    post:
+      tags:
+      - System
+      summary: Khởi tạo lại cơ sở dữ liệu
+      description: Dùng để tạo bảng và dữ liệu mẫu ban đầu.
+      operationId: init_db_post
+      responses:
+        "200":
+          description: Database initialized successfully.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/inline_response_200_1"
+      x-openapi-router-controller: swagger_server.controllers.system_controller
+  /auths:
+    post:
+      tags:
+      - Auths
+      summary: Đăng nhập
+      description: Đăng nhập bằng username và password để nhận JWT token.
+      operationId: auths_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/auths_body"
+        required: true
+      responses:
+        "200":
+          description: Đăng nhập thành công
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/inline_response_200_2"
+        "401":
+          description: Sai username hoặc password
+      x-openapi-router-controller: swagger_server.controllers.auths_controller
+  /users:
+    get:
+      tags:
+      - Users
+      summary: Lấy danh sách người dùng (có tìm kiếm & phân trang)
+      operationId: users_get
+      parameters:
+      - name: search
+        in: query
+        description: Từ khóa tìm kiếm theo tên hoặc username
+        required: false
+        style: form
+        explode: true
+        schema:
+          type: string
+          example: cuong
+      - name: page
+        in: query
+        description: Số trang (bắt đầu từ 1)
+        required: false
+        style: form
+        explode: true
+        schema:
+          type: integer
+          default: 1
+      - name: limit
+        in: query
+        description: Số bản ghi mỗi trang
+        required: false
+        style: form
+        explode: true
+        schema:
+          type: integer
+          default: 10
+      responses:
+        "200":
+          description: Danh sách người dùng có phân trang
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/inline_response_200_3"
+      security:
+      - bearerAuth: []
+      x-openapi-router-controller: swagger_server.controllers.users_controller
+    post:
+      tags:
+      - Users
+      summary: Tạo người dùng mới
+      operationId: users_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserCreate"
+        required: true
+      responses:
+        "201":
+          description: Người dùng được tạo thành công
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+      x-openapi-router-controller: swagger_server.controllers.users_controller
+  /books:
+    get:
+      tags:
+      - Books
+      summary: Lấy danh sách tất cả sách (có tìm kiếm & phân trang)
+      operationId: books_get
+      parameters:
+      - name: search
+        in: query
+        description: Từ khóa tìm kiếm theo tiêu đề hoặc tác giả
+        required: false
+        style: form
+        explode: true
+        schema:
+          type: string
+          example: harry
+      - name: page
+        in: query
+        description: Số trang (bắt đầu từ 1)
+        required: false
+        style: form
+        explode: true
+        schema:
+          type: integer
+          default: 1
+      - name: limit
+        in: query
+        description: Số bản ghi mỗi trang
+        required: false
+        style: form
+        explode: true
+        schema:
+          type: integer
+          default: 10
+      responses:
+        "200":
+          description: Danh sách sách có phân trang
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/inline_response_200_4"
+      x-openapi-router-controller: swagger_server.controllers.books_controller
+    post:
+      tags:
+      - Books
+      summary: Thêm sách mới
+      operationId: books_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BookCreate"
+        required: true
+      responses:
+        "201":
+          description: Sách được thêm thành công
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Book"
+      security:
+      - bearerAuth: []
+      x-openapi-router-controller: swagger_server.controllers.books_controller
+  /books/{id}:
+    get:
+      tags:
+      - Books
+      summary: Lấy thông tin sách theo ID
+      operationId: books_id_get
+      parameters:
+      - name: id
+        in: path
+        required: true
+        style: simple
+        explode: false
+        schema:
+          type: integer
+      responses:
+        "200":
+          description: Thông tin sách
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Book"
+        "404":
+          description: Không tìm thấy sách
+      x-openapi-router-controller: swagger_server.controllers.books_controller
+    put:
+      tags:
+      - Books
+      summary: Cập nhật thông tin sách
+      operationId: books_id_put
+      parameters:
+      - name: id
+        in: path
+        required: true
+        style: simple
+        explode: false
+        schema:
+          type: integer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BookCreate"
+        required: true
+      responses:
+        "200":
+          description: Cập nhật thành công
+      security:
+      - bearerAuth: []
+      x-openapi-router-controller: swagger_server.controllers.books_controller
+    delete:
+      tags:
+      - Books
+      summary: Xóa sách
+      operationId: books_id_delete
+      parameters:
+      - name: id
+        in: path
+        required: true
+        style: simple
+        explode: false
+        schema:
+          type: integer
+      responses:
+        "200":
+          description: Xóa thành công
+      security:
+      - bearerAuth: []
+      x-openapi-router-controller: swagger_server.controllers.books_controller
+  /loans:
+    get:
+      tags:
+      - Loans
+      summary: Lấy danh sách lượt mượn (có tìm kiếm & phân trang)
+      operationId: loans_get
+      parameters:
+      - name: search
+        in: query
+        description: Tìm kiếm theo tên người dùng hoặc tiêu đề sách
+        required: false
+        style: form
+        explode: true
+        schema:
+          type: string
+          example: cuong
+      - name: page
+        in: query
+        description: Số trang (bắt đầu từ 1)
+        required: false
+        style: form
+        explode: true
+        schema:
+          type: integer
+          default: 1
+      - name: limit
+        in: query
+        description: Số bản ghi mỗi trang
+        required: false
+        style: form
+        explode: true
+        schema:
+          type: integer
+          default: 10
+      responses:
+        "200":
+          description: Danh sách lượt mượn có phân trang
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/inline_response_200_5"
+      security:
+      - bearerAuth: []
+      x-openapi-router-controller: swagger_server.controllers.loans_controller
+    post:
+      tags:
+      - Loans
+      summary: Mượn sách mới
+      operationId: loans_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/loans_body"
+        required: true
+      responses:
+        "201":
+          description: Tạo lượt mượn thành công
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Loan"
+      security:
+      - bearerAuth: []
+      x-openapi-router-controller: swagger_server.controllers.loans_controller
+  /loans/{id}/return:
+    patch:
+      tags:
+      - Loans
+      summary: Trả sách
+      operationId: loans_id_return_patch
+      parameters:
+      - name: id
+        in: path
+        required: true
+        style: simple
+        explode: false
+        schema:
+          type: integer
+      responses:
+        "200":
+          description: Trả sách thành công
+        "404":
+          description: Không tìm thấy lượt mượn
+      security:
+      - bearerAuth: []
+      x-openapi-router-controller: swagger_server.controllers.loans_controller
+components:
+  schemas:
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+        username:
+          type: string
+        name:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+      example:
+        name: name
+        created_at: 2000-01-23T04:56:07.000+00:00
+        id: 0
+        username: username
+    UserCreate:
+      required:
+      - name
+      - password
+      - username
+      type: object
+      properties:
+        username:
+          type: string
+          example: cuong
+        password:
+          type: string
+          example: "123456"
+        name:
+          type: string
+          example: cuong
+    Book:
+      type: object
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        author:
+          type: string
+        available:
+          type: boolean
+      example:
+        author: author
+        available: true
+        id: 0
+        title: title
+    BookCreate:
+      required:
+      - author
+      - title
+      type: object
+      properties:
+        title:
+          type: string
+          example: Harry Potter
+        author:
+          type: string
+          example: J. K. Rowling
+    Loan:
+      type: object
+      properties:
+        id:
+          type: integer
+        user_id:
+          type: integer
+        book_id:
+          type: integer
+        borrow_date:
+          type: string
+          format: date-time
+        return_date:
+          type: string
+          format: date-time
+          nullable: true
+      example:
+        user_id: 6
+        borrow_date: 2000-01-23T04:56:07.000+00:00
+        id: 0
+        book_id: 1
+        return_date: 2000-01-23T04:56:07.000+00:00
+    inline_response_200:
+      type: object
+      properties:
+        message:
+          type: string
+          example: "Hello, World!"
+      example:
+        message: "Hello, World!"
+    inline_response_200_1:
+      type: object
+      properties:
+        message:
+          type: string
+          example: Database initialized successfully.
+      example:
+        message: Database initialized successfully.
+    auths_body:
+      type: object
+      properties:
+        username:
+          type: string
+          example: cuong
+        password:
+          type: string
+          example: "123456"
+    inline_response_200_2:
+      type: object
+      properties:
+        access_token:
+          type: string
+          example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+      example:
+        access_token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+    inline_response_200_3:
+      type: object
+      properties:
+        total:
+          type: integer
+          example: 42
+        page:
+          type: integer
+          example: 1
+        limit:
+          type: integer
+          example: 10
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/User"
+      example:
+        total: 42
+        data:
+        - name: name
+          created_at: 2000-01-23T04:56:07.000+00:00
+          id: 0
+          username: username
+        - name: name
+          created_at: 2000-01-23T04:56:07.000+00:00
+          id: 0
+          username: username
+        limit: 10
+        page: 1
+    inline_response_200_4:
+      type: object
+      properties:
+        total:
+          type: integer
+          example: 120
+        page:
+          type: integer
+          example: 1
+        limit:
+          type: integer
+          example: 10
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Book"
+      example:
+        total: 120
+        data:
+        - author: author
+          available: true
+          id: 0
+          title: title
+        - author: author
+          available: true
+          id: 0
+          title: title
+        limit: 10
+        page: 1
+    inline_response_200_5:
+      type: object
+      properties:
+        total:
+          type: integer
+          example: 15
+        page:
+          type: integer
+          example: 1
+        limit:
+          type: integer
+          example: 10
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Loan"
+      example:
+        total: 15
+        data:
+        - user_id: 6
+          borrow_date: 2000-01-23T04:56:07.000+00:00
+          id: 0
+          book_id: 1
+          return_date: 2000-01-23T04:56:07.000+00:00
+        - user_id: 6
+          borrow_date: 2000-01-23T04:56:07.000+00:00
+          id: 0
+          book_id: 1
+          return_date: 2000-01-23T04:56:07.000+00:00
+        limit: 10
+        page: 1
+    loans_body:
+      type: object
+      properties:
+        user_id:
+          type: integer
+          example: 1
+        book_id:
+          type: integer
+          example: 2
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      x-bearerInfoFunc: swagger_server.controllers.authorization_controller.check_bearerAuth
+
