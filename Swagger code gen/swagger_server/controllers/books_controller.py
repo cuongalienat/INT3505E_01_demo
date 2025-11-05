@@ -5,6 +5,7 @@ from swagger_server.models.book import Book  # noqa: E501
 from swagger_server.models.book_create import BookCreate  # noqa: E501
 from swagger_server.models.inline_response2004 import InlineResponse2004  # noqa: E501
 from swagger_server import util
+from flask import request, jsonify, current_app
 
 
 def books_get(search=None, page=None, limit=None):  # noqa: E501
@@ -77,6 +78,13 @@ def books_post(body):  # noqa: E501
 
     :rtype: Book
     """
-    if connexion.request.is_json:
-        body = BookCreate.from_dict(connexion.request.get_json())  # noqa: E501
-    return 'do some magic!'
+    data = request.json
+    mongo = current_app.extensions['pymongo']
+    books_col = mongo.db.books
+
+    books_col.insert_one({
+        "title": data["title"],
+        "author": data["author"],
+        "available": True
+    })
+    return jsonify({"message": "Book added"}), 201

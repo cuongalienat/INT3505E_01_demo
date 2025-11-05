@@ -1,20 +1,23 @@
-from connexion.apps.flask_app import FlaskJSONEncoder
-import six
+import json
+from datetime import date, datetime
+from flask.json.provider import DefaultJSONProvider
 
-from swagger_server.models.base_model_ import Model
+
+class JSONEncoder(json.JSONEncoder):
+    """Custom JSON Encoder compatible with Connexion 3.x and Flask 3."""
+
+    def default(self, obj):
+        if isinstance(obj, (datetime, date)):
+            return obj.isoformat()
+        return json.JSONEncoder.default(self, obj)
 
 
-class JSONEncoder(FlaskJSONEncoder):
-    include_nulls = False
+class CustomJSONProvider(DefaultJSONProvider):
+    """Custom JSON Provider to use our JSONEncoder."""
 
-    def default(self, o):
-        if isinstance(o, Model):
-            dikt = {}
-            for attr, _ in six.iteritems(o.swagger_types):
-                value = getattr(o, attr)
-                if value is None and not self.include_nulls:
-                    continue
-                attr = o.attribute_map[attr]
-                dikt[attr] = value
-            return dikt
-        return FlaskJSONEncoder.default(self, o)
+    def dumps(self, obj, **kwargs):
+        kwargs.setdefault("cls", JSONEncoder)
+        return json.dumps(obj, **kwargs)
+
+    def loads(self, s, **kwargs):
+        return json.loads(s, **kwargs)
