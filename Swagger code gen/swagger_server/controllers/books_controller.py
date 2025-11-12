@@ -1,90 +1,125 @@
 import connexion
-import six
-
-from swagger_server.models.book import Book  # noqa: E501
-from swagger_server.models.book_create import BookCreate  # noqa: E501
-from swagger_server.models.inline_response2004 import InlineResponse2004  # noqa: E501
-from swagger_server import util
 from flask import request, jsonify, current_app
+from bson.objectid import ObjectId
 
+def books_get(search=None, page=1, limit=10):
+    """Lấy danh sách tất cả sách (có tìm kiếm & phân trang)"""
+    mongo = getattr(current_app, "mongo", None)
+    if not mongo:
+        return jsonify({"error": "MongoDB chưa được khởi tạo"}), 500
 
-def books_get(search=None, page=None, limit=None):  # noqa: E501
-    """Lấy danh sách tất cả sách (có tìm kiếm &amp; phân trang)
-
-     # noqa: E501
-
-    :param search: Từ khóa tìm kiếm theo tiêu đề hoặc tác giả
-    :type search: str
-    :param page: Số trang (bắt đầu từ 1)
-    :type page: int
-    :param limit: Số bản ghi mỗi trang
-    :type limit: int
-
-    :rtype: InlineResponse2004
-    """
-    return 'do some magic!'
-
-
-def books_id_delete(id):  # noqa: E501
-    """Xóa sách
-
-     # noqa: E501
-
-    :param id: 
-    :type id: int
-
-    :rtype: None
-    """
-    return 'do some magic!'
-
-
-def books_id_get(id):  # noqa: E501
-    """Lấy thông tin sách theo ID
-
-     # noqa: E501
-
-    :param id: 
-    :type id: int
-
-    :rtype: Book
-    """
-    return 'do some magic!'
-
-
-def books_id_put(body, id):  # noqa: E501
-    """Cập nhật thông tin sách
-
-     # noqa: E501
-
-    :param body: 
-    :type body: dict | bytes
-    :param id: 
-    :type id: int
-
-    :rtype: None
-    """
-    if connexion.request.is_json:
-        body = BookCreate.from_dict(connexion.request.get_json())  # noqa: E501
-    return 'do some magic!'
-
-
-def books_post(body):  # noqa: E501
-    """Thêm sách mới
-
-     # noqa: E501
-
-    :param body: 
-    :type body: dict | bytes
-
-    :rtype: Book
-    """
-    data = request.json
-    mongo = current_app.extensions['pymongo']
     books_col = mongo.db.books
 
-    books_col.insert_one({
+    query = {}
+    if search:
+        query = {
+            "$or": [
+                {"title": {"$regex": search, "$options": "i"}},
+                {"author": {"$regex": search, "$options": "i"}},
+            ]
+        }
+
+    page = int(page)
+    limit = int(limit)
+    skip = (page - 1) * limit
+
+    books_cursor = books_col.find(query).skip(skip).limit(limit)
+    books = []
+    for b in books_cursor:
+        b["_id"] = str(b["_id"])
+        books.append(b)
+
+    total = books_col.count_documents(query)
+    return jsonify({
+        "total": total,
+        "page": page,
+        "limit": limit,
+        "books": books
+    }), 200
+
+
+def books_id_get(id):
+    """Lấy thông tin sách theo ID Mongo"""
+    mongo = getattr(current_app, "mongo", None)
+    if not mongo:
+        return jsonify({"error": "MongoDB chưa được khởi tạo"}), 500
+
+    books_col = mongo.db.books
+
+    try:
+        book = books_col.find_one({"_id": ObjectId(id)})
+    except Exception:
+        return jsonify({"error": "ID sách không hợp lệ"}), 400
+
+    if not book:
+        return jsonify({"error": "Không tìm thấy sách"}), 404
+
+    book["_id"] = str(book["_id"])
+    return jsonify(book), 200
+
+
+def books_post(body):
+    """Thêm sách mới vào Mongo"""
+    mongo = getattr(current_app, "mongo", None)
+    if not mongo:
+        return jsonify({"error": "MongoDB chưa được khởi tạo"}), 500
+
+    data = request.json or {}
+    books_col = mongo.db.books
+
+    if not data.get("title") or not data.get("author"):
+        return jsonify({"error": "Thiếu tiêu đề hoặc tác giả"}), 400
+
+    result = books_col.insert_one({
         "title": data["title"],
         "author": data["author"],
         "available": True
     })
-    return jsonify({"message": "Book added"}), 201
+
+    return jsonify({
+        "message": "Thêm sách thành công",
+        "id": str(result.inserted_id)
+    }), 201
+
+
+def books_id_put(body, id):
+    """Cập nhật thông tin sách theo ID Mongo"""
+    mongo = getattr(current_app, "mongo", None)
+    if not mongo:
+        return jsonify({"error": "MongoDB chưa được khởi tạo"}), 500
+
+    data = request.json or {}
+    books_col = mongo.db.books
+
+    update_data = {k: v for k, v in data.items() if k in ["title", "author", "available"]}
+    if not update_data:
+        return jsonify({"error": "Không có dữ liệu cập nhật"}), 400
+
+    try:
+        result = books_col.update_one({"_id": ObjectId(id)}, {"$set": update_data})
+    except Exception:
+        return jsonify({"error": "ID sách không hợp lệ"}), 400
+
+    if result.matched_count == 0:
+        return jsonify({"error": "Không tìm thấy sách"}), 404
+
+    return jsonify({"message": "Cập nhật sách thành công"}), 200
+
+
+def books_id_delete(id):
+    """Xóa sách theo ID Mongo"""
+    mongo = getattr(current_app, "mongo", None)
+    if not mongo:
+        return jsonify({"error": "MongoDB chưa được khởi tạo"}), 500
+
+    books_col = mongo.db.books
+
+    try:
+        result = books_col.delete_one({"_id": ObjectId(id)})
+    except Exception:
+        return jsonify({"error": "ID sách không hợp lệ"}), 400
+
+    if result.deleted_count == 0:
+        return jsonify({"error": "Không tìm thấy sách"}), 404
+
+    return jsonify({"message": "Xóa sách thành công"}), 200
