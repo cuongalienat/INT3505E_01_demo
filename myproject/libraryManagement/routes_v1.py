@@ -2,9 +2,19 @@ from flask import Blueprint, jsonify, request, url_for, current_app
 from db import get_db, init_db
 from datetime import datetime
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
+from pybreaker import CircuitBreaker, CircuitBreakerError
+import logging
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 
 v1 = Blueprint("v1", __name__, url_prefix="/api/v1")
 
+
+limiter = Limiter(
+    key_func=get_remote_address, # Dùng IP của client để giới hạn
+    default_limits=["200 per day", "50 per hour"], # Giới hạn mặc định cho tất cả route
+)
+db_breaker = CircuitBreaker(fail_max=5, reset_timeout=30)
 # -------------------- SYSTEM --------------------
 @v1.route("/init-db", methods=["GET"])
 def init_database():
@@ -13,15 +23,35 @@ def init_database():
 
 # -------------------- AUTH --------------------
 @v1.route("/auths", methods=["POST"])
+@limiter.limit("5 per minute")
 def login():
     data = request.json
-    db = get_db()
-    user = db.execute("SELECT * FROM users WHERE username = ?", (data["username"],)).fetchone()
-    if not user or user["password"] != data["password"]:
-        return jsonify({"msg": "user not exist"}), 400
+    username = data.get("username")
+    password = data.get("password")
 
-    access_token = create_access_token(identity=str(user["id"]))
-    return jsonify({"msg": "sign in successfully", "access_token": access_token}), 200
+    def attempt_login(u, p):
+        db = get_db()
+        user = db.execute("SELECT * FROM users WHERE username = ?", (u,)).fetchone()
+        if not user or user["password"] != p:
+            return None
+        return user
+    try:
+        user = db_breaker.call(attempt_login, username, password)
+        if not user:
+            current_app.logger.warning(f"Failed login attempt for username: {username}")
+            return jsonify({"msg": "Tên đăng nhập hoặc mật khẩu không đúng."}), 400
+
+        access_token = create_access_token(identity=str(user["id"]))
+        current_app.logger.info(f"User {user['id']} logged in successfully.")
+        return jsonify({"msg": "Đăng nhập thành công", "access_token": access_token}), 200
+    except CircuitBreakerError:
+        current_app.logger.error("Database connection error - Circuit Breaker Open")
+        return jsonify({"msg": "Hệ thống đăng nhập đang bảo trì. Vui lòng thử lại sau ít phút."}), 503
+    except Exception as e:
+        # Xử lý các lỗi khác không liên quan đến breaker
+        current_app.logger.error(f"An unexpected error occurred: {e}")
+        return jsonify({"msg": "Đã xảy ra lỗi không mong muốn."}), 500
+    
 
 # -------------------- USERS --------------------
 @v1.route("/users", methods=["POST"])
@@ -84,6 +114,7 @@ def get_all_users():
 
 # -------------------- BOOKS --------------------
 @v1.route("/books", methods=["GET"])
+@limiter.limit("100 per hour")
 def get_books():
     """
     GET /books: Lấy danh sách sách có tìm kiếm và phân trang.
@@ -118,7 +149,6 @@ def get_books():
 
 
 @v1.route("/books/<int:id>", methods=["GET"])
-@jwt_required()
 def get_book(id):
     db = get_db()
     book = db.execute("SELECT * FROM books WHERE id = ?", (id,)).fetchone()
@@ -128,6 +158,7 @@ def get_book(id):
 
 
 @v1.route("/books", methods=["POST"])
+@jwt_required()
 def add_book():
     data = request.json
     db = get_db()
