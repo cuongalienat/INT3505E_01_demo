@@ -10,4 +10,5 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY libraryManagement ./libraryManagement
 
-CMD ["python3", "-m", "flask", "--app", "libraryManagement/app.py", "run", "--host=0.0.0.0", "--port=${PORT}"]
+# Dùng shell form để $PORT được expand
+CMD python3 -m flask --app libraryManagement/app.py run --host=0.0.0.0 --port=$PORT
