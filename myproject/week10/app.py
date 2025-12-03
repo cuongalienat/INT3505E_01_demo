@@ -2,9 +2,12 @@ from flask import Flask, jsonify, request
 from flask_pymongo import PyMongo
 from dotenv import load_dotenv
 import os
-from datetime import datetime
+from datetime import datetime, UTC
 import time
+from deprecated import deprecated 
+import warnings
 
+warnings.simplefilter("default", DeprecationWarning)
 # Tải biến môi trường
 load_dotenv()
 
@@ -40,11 +43,36 @@ def convert_to_base(amount, currency):
     return int(round(base_amount * BASE_AMOUNT_FACTOR))
 
 # --- API Version 1 (V1) - Nghiệp vụ VND Cố định ---
+@app.route("/api/migrate/payments", methods=["POST"])
+def auto_migrate_payment():
+    """
+    Tự động chuyển request V1 sang V2.
+    Dành cho client không chịu cập nhật currencyCode.
+    """
+    data = request.get_json()
+
+    # Nếu client không gửi currencyCode → mặc định dùng VND (v1 style)
+    if "currencyCode" not in data:
+        data["currencyCode"] = "VND"
+
+    # Chuyển hướng sang xử lý logic của V2
+    with app.test_request_context(
+        "/api/v2/payments",
+        method="POST",
+        json=data
+    ):
+        return create_payment_v2()
+
 @app.route('/api/v1/payments', methods=['POST'])
 def create_payment_v1():
+    warnings.warn(
+        "API V1 đã lỗi thời và sẽ bị gỡ bỏ vào ngày 01/01/2026.",
+        DeprecationWarning,
+        stacklevel=2
+    )
     """
     V1: Tạo giao dịch. CHỈ CHẤP NHẬN VND (implicit).
-    Input: {"amount": 100000.00} (snake_case)
+    Input: {"amount": 100000.00}
     """
     data = request.get_json()
     
@@ -61,18 +89,23 @@ def create_payment_v1():
         "amount": amount_cents, 
         "currencyCode": "VND", # Hardcode VND
         "status": 'SUCCESS',
-        "processedAt": datetime.utcnow(),
+        "processedAt": datetime.now(UTC).isoformat(),
         "version": 1
     }
     
     result = payments_collection.insert_one(new_payment_document)
     
-    # Response V1 (snake_case)
-    return jsonify({
+    # Response V1 
+    response = jsonify({
         "statusCode": 201,
-        "transactionId": new_payment_document['transactionId'],
-        "paymentAmountVnd": amount_float # Chỉ hiển thị VND
-    }), 201
+        "transactionId": new_payment_document["transactionId"],
+        "paymentAmountVnd": amount_float
+    })
+    response.headers["X-API-Deprecated"] = "true"
+    response.headers["X-API-EOL"] = "2026-01-01"
+    response.headers["X-Migration-Guide"] = "/docs/migration/v1-to-v2"
+
+    return response, 201
 
 
 # --- API Version 2 (V2) - Nghiệp vụ Đa tiền tệ ---
@@ -80,7 +113,7 @@ def create_payment_v1():
 def create_payment_v2():
     """
     V2: Tạo giao dịch. YÊU CẦU currencyCode và QUY ĐỔI sang base currency.
-    Input: {"amount": 50.00, "currencyCode": "USD"} (camelCase)
+    Input: {"amount": 50.00, "currencyCode": "USD"}
     """
     data = request.get_json()
     
@@ -114,7 +147,7 @@ def create_payment_v2():
     
     result = payments_collection.insert_one(new_payment_document)
 
-    # Response V2 (camelCase, chi tiết cả 2 loại tiền)
+    # Response V2 
     return jsonify({
         "status": "SUCCESS", 
         "data": {

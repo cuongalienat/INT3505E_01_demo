@@ -14,7 +14,7 @@ limiter = Limiter(
     key_func=get_remote_address, # Dùng IP của client để giới hạn
     default_limits=["200 per day", "50 per hour"], # Giới hạn mặc định cho tất cả route
 )
-db_breaker = CircuitBreaker(fail_max=5, reset_timeout=30)
+db_breaker = CircuitBreaker(fail_max=3, reset_timeout=30)
 # -------------------- SYSTEM --------------------
 @v1.route("/init-db", methods=["GET"])
 def init_database():
