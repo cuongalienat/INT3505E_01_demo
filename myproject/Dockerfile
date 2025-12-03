@@ -24,5 +24,5 @@ EXPOSE 5000
 # Tức là module của bạn là 'libraryManagement' và đối tượng Flask là 'app'
 # Bạn NÊN sử dụng Gunicorn (nếu đã cài đặt trong requirements.txt)
 # Hoặc nếu bạn muốn dùng Flask built-in server (chỉ nên dùng cho demo):
-CMD ["python3", "./libraryManagement/app.py"] 
+CMD ["python3", "-m", "flask", "run", "--host=0.0.0.0", "--port=8080"]
 
