@@ -15,7 +15,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 # SAO CHÉP CHỈ THƯ MỤC CHỨA CODE CỦA BẠN (libraryManagement)
 # và các file config khác lên thư mục làm việc
 COPY libraryManagement ./libraryManagement
-COPY .dockerignore .
 
 # Mở cổng 5000
 EXPOSE 5000
@@ -27,6 +26,3 @@ EXPOSE 5000
 # Hoặc nếu bạn muốn dùng Flask built-in server (chỉ nên dùng cho demo):
 CMD ["python3", "./libraryManagement/app.py"] 
 
-# Nếu bạn dùng Gunicorn (Khuyến nghị cho Deploy):
-# Thay thế 'app' bằng tên biến Flask instance của bạn trong file app.py
-# CMD ["gunicorn", "--bind", "0.0.0.0:5000", "libraryManagement.app:app"]
